@@ -1,0 +1,21 @@
+BOT_TOKEN = 'TOKEN_HERE'
+
+REACTION_ROLES_CONF = [
+  {
+    guild: GUILD_ID,
+    role: ROLE_ID,
+    ch: CHANNEL_ID,
+    msg: MESSAGE_ID,
+    emote: "\u{1F197}", # unicode emoji
+    remove: false
+  },
+  {
+    guild: GUILD_ID,
+    role: ROLE_ID,
+    ch: CHANNEL_ID,
+    msg: MESSAGE_ID,
+    emote: EMOTE_ID, # custom emote
+    remove: true # enable auto-remove when reaction removed
+  }
+]
+
