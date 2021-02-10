@@ -3,9 +3,9 @@
 require 'discordrb'
 require 'pp'
 
-bot = Discordrb::Bot.new token: BOT_TOKEN
-
 require "./CONFIG"
+
+bot = Discordrb::Bot.new token: BOT_TOKEN
 
 puts "This bot's invite URL is #{bot.invite_url}."
 puts 'Click on it to invite it to your server.'
