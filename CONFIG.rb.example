@@ -19,3 +19,17 @@ REACTION_ROLES_CONF = [
   }
 ]
 
+CHANNEL_SYNC_WEBHOOK_NAME = 'DANNYAAMDCINTEGRATORCHSYNC'
+
+CHANNEL_SYNC_CONF = [
+  [ # sync channel group
+    {
+      guild: GUILD_ID_1,
+      ch: CHANNEL_ID_1
+    },
+    {
+      guild: GUILD_ID_2,
+      ch: CHANNEL_ID_2
+    }
+  ]
+]
