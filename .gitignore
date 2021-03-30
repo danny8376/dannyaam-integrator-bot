@@ -126,3 +126,4 @@ tags
 # End of https://www.toptal.com/developers/gitignore/api/ruby,linux,macos,vim
 
 CONFIG.rb
+db.yml

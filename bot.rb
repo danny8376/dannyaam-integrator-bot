@@ -1,12 +1,191 @@
 # frozen_string_literal: true
 
 require 'set'
+require 'yaml'
+require 'securerandom'
+require 'openssl'
+require 'twitch-api'
+require 'sinatra/base'
 require 'discordrb'
 require 'discordrb/webhooks'
 
 require 'pp'
 
 require "./CONFIG"
+
+# ==== DB? ====
+
+class CrudeDB
+  def initialize(dbf)
+    @dbf = dbf
+    @db = File.exist?(@dbf) ? YAML.load(File.read(@dbf)) : {}
+  end
+  def [](key)
+    @db[key]
+  end
+  def []=(key,val)
+    @db[key] = val
+    save
+  end
+  def save
+    File.write(@dbf, @db.to_yaml)
+  end
+end
+
+DB = CrudeDB.new DB_FILENAME
+
+
+# ==== Webhook Server ====
+
+class WebhookServer < Sinatra::Base
+  @@twitch_callbacks = []
+
+  configure do
+    set :server, 'thin'
+    set :bind, HTTP_BACKEND_BIND
+    set :port, HTTP_BACKEND_PORT
+  end
+
+  post "#{HTTP_BACKEND_PREFIX}/webhook" do
+    body = JSON.parse(request.body.read) rescue {}
+
+    @@twitch_callbacks.each do |cb|
+      request.body.rewind
+      res = cb.call headers, body, self
+      return res if res
+    end
+
+    [404, "no backend"]
+  end
+
+  def self.twitch_webhook(once=true, &block)
+    @@twitch_callbacks.push(lambda { |*args|
+      res = block.call *args
+      @@twitch_callbacks.delete block if once and res
+      res
+    })
+  end
+end
+
+
+# ==== Twitch API ====
+
+class EventSubSubscription
+  def initialize(attributes = {})
+    pp attributes
+  end
+end
+
+class TwitchClientPatched < Twitch::Client
+  def get_eventsubs(options = {})
+      initialize_response EventSubSubscription, get('eventsub/subscriptions', options)
+  end
+
+  def eventsub(options = {})
+    eventsub_options = {
+      type: options[:event_type],
+      version: "1",
+      condition: {
+        broadcaster_user_id: options[:user_id]
+      },
+      transport: {
+        method: "webhook",
+        callback: options[:webhook],
+        secret: options[:secret]
+      }
+    }
+    require_access_token do
+      initialize_response EventSubSubscription, post('eventsub/subscriptions', eventsub_options)
+    end
+  end
+end
+
+TWITCH_OAUTH_PARM = {
+  client_id: TWITCH_CLIENT_ID,
+  client_secret: TWITCH_CLIENT_SECRET,
+  token_type: :user,
+  redirect_uri: TWITCH_CALLBACK
+}
+
+=begin
+  TWITCH_CLIENT = Twitch::Client.new(**TWITCH_OAUTH_PARM.merge((DB[:twitch_token] || {}).slice(:access_token, :refresh_token)))
+rescue TwitchOAuth2::Error => error
+  puts "NO ACCESS TOKEN, PLEASE GO => #{error.metadata[:link]} <= FOR TOKEN"
+  puts "Type the code you got above: "
+  client = TwitchOAuth2::Client.new(**TWITCH_OAUTH_PARM.slice(:client_id, :client_secret, :redirect_uri, :scope))
+  code = gets.chomp
+  DB[:twitch_token] = client.token(token_type: :user, code: code)
+  retry
+=end
+
+TWITCH_APP_CLIENT = TwitchClientPatched.new(**TWITCH_OAUTH_PARM.slice(:client_id, :client_secret))
+
+#pp TWITCH_APP_CLIENT.get_users(login: "danny8376")
+
+DB[:twitch_eventsub_secret] ||= SecureRandom.alphanumeric(16)
+
+def verify_twitch_eventsub(server)
+  request = server.request
+  body = request.body.read
+  request.body.rewind # rewind for real usage
+  msg_id = request.env['HTTP_TWITCH_EVENTSUB_MESSAGE_ID']
+  timestamp = request.env['HTTP_TWITCH_EVENTSUB_MESSAGE_TIMESTAMP']
+  req_sig = request.env['HTTP_TWITCH_EVENTSUB_MESSAGE_SIGNATURE']
+  hmac_message = "#{msg_id}#{timestamp}#{body}"
+  digest = OpenSSL::Digest.new('sha256')
+  signature = OpenSSL::HMAC.hexdigest(digest, DB[:twitch_eventsub_secret], hmac_message)
+  req_sig == "sha256=#{signature}"
+end
+
+secret = DB[:twitch_eventsub_secret]
+
+puts "SECRET: #{secret}"
+
+DB[:twitch_eventsub_subscriptions] ||= []
+
+if false # DB[:twitch_eventsub_subscriptions].size <= 1
+
+#=begin
+res = TWITCH_APP_CLIENT.eventsub(
+  event_type: "stream.offline",
+  #user_id: "25863177", # ME:danny8376
+  user_id: "38652226", # ME:danny0609
+  webhook: "https://test.botsub.saru.moe/dannyaam-integrator-bot/webhook",
+  secret: secret
+)
+pp res
+#=end
+
+status = res.body["data"][0]["status"] rescue "webhook_callback_verification_pending"
+
+if status == "webhook_callback_verification_pending"
+
+  WebhookServer.twitch_webhook do |headers, body, server|
+    if verify_twitch_eventsub(server)
+      DB[:twitch_eventsub_subscriptions].push body["subscription"]
+      DB.save
+      pp DB[:twitch_eventsub_subscriptions]
+      body["challenge"] # return challenge to valid subscription
+    end
+  end
+
+end
+
+else
+
+pp DB[:twitch_eventsub_subscriptions]
+
+end
+
+
+WebhookServer.twitch_webhook do |headers, body, server|
+  pp body
+end
+
+#pp TWITCH_CLIENT.get_clips(id: "GleamingCulturedAntelopeDxCat")
+
+
+# ==== DC Bot ====
 
 bot = Discordrb::Bot.new token: BOT_TOKEN
 
@@ -185,4 +364,5 @@ bot.message do |event|
   end
 end
 
-bot.run
+#bot.run
+WebhookServer.run!
