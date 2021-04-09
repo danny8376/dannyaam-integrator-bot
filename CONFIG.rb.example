@@ -1,35 +1,68 @@
-BOT_TOKEN = 'TOKEN_HERE'
+HTTP_SERVER_CONF = {
+  bind: '127.0.0.1',
+  port: 48441,
+  prefix: '/dannyaam-integrator-bot',
+  host: '<your_domain_name_here>'
+}
 
-REACTION_ROLES_CONF = [
-  {
-    guild: GUILD_ID,
-    role: ROLE_ID,
-    ch: CHANNEL_ID,
-    msg: MESSAGE_ID,
-    emote: "\u{1F197}", # unicode emoji
-    remove: false
-  },
-  {
-    guild: GUILD_ID,
-    role: ROLE_ID,
-    ch: CHANNEL_ID,
-    msg: MESSAGE_ID,
-    emote: EMOTE_ID, # custom emote
-    remove: true # enable auto-remove when reaction removed
+DB_CONF = {
+  filename: 'db.yml'
+}
+
+TWITCH_BOT_CONF = {
+  client_id: '<TWITCH_CLIENT_ID>',
+  client_secret: '<TWITCH_CLIENT_SECRET>',
+  userids: {
+    <USER_ID_HERE> => { # ME:danny8376
+      live_notify: true,
+      live_notify_target: {
+        discord: {
+          webhook_name: "DANNYAAMDCINTEGRATORLIVENOTIFY",
+          channels: [
+            {
+              g: <GUILD_ID>,
+              ch: <CHANNEL_ID>,
+              on: "<STREAM_ONLINE_MESSAGE>",
+              off: "<STREAM_OFFLINE_MESSAGE>"
+            }
+          ]
+        }
+      }
+    }
   }
-]
+}
 
-CHANNEL_SYNC_WEBHOOK_NAME = 'DANNYAAMDCINTEGRATORCHSYNC'
-
-CHANNEL_SYNC_CONF = [
-  [ # sync channel group
+DISCORD_BOT_CONF = {
+  token: '<DISCORD_BOT_TOKEN>',
+  reaction_roles: [
     {
-      guild: GUILD_ID_1,
-      ch: CHANNEL_ID_1
+      guild: GUILD_ID,
+      role: ROLE_ID,
+      ch: CHANNEL_ID,
+      msg: MESSAGE_ID,
+      emote: "\u{1F197}", # unicode emoji
+      remove: false
     },
     {
-      guild: GUILD_ID_2,
-      ch: CHANNEL_ID_2
+      guild: GUILD_ID,
+      role: ROLE_ID,
+      ch: CHANNEL_ID,
+      msg: MESSAGE_ID,
+      emote: EMOTE_ID, # custom emote
+      remove: true # enable auto-remove when reaction removed
     }
-  ]
-]
+  ],
+  channel_sync: {
+    webhook_name: 'DANNYAAMDCINTEGRATORCHSYNCTEST',
+    sync_list: [
+      {
+        guild: GUILD_ID_1,
+        ch: CHANNEL_ID_1
+      },
+      {
+        guild: GUILD_ID_2,
+        ch: CHANNEL_ID_2
+      }
+    ]
+  }
+}

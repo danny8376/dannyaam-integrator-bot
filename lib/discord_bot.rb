@@ -9,7 +9,7 @@ require 'discordrb/webhooks'
 class DiscordBot
 
   ReactionRoleKey = Struct.new(:guild, :ch, :msg, :emote)
-  ChannelSyncKey = Struct.new(:guild, :ch)
+  ChannelKey = Struct.new(:guild, :ch)
 
   # dirty hack for discordrb bug -3-
   class SpNilClass
@@ -22,15 +22,20 @@ class DiscordBot
   end
   SpNil = SpNilClass.new
 
-  def initialize(conf)
+  def initialize(conf, sys)
     @conf = conf
+    @sys = sys
+
     @bot = Discordrb::Bot.new token: @conf[:token]
+    @bot.debug = $log_mode == :debug
 
     puts "This bot's invite URL is #{@bot.invite_url}."
     puts 'Click on it to invite it to your server.'
 
     init_reaction_roles
     init_channel_sync
+
+    @live_notify_webhook = {}
   end
 
   def init_reaction_roles
@@ -161,7 +166,7 @@ class DiscordBot
     @channel_sync.default_proc = proc { |h, k| h[k] = Set.new }
     @conf[:channel_sync][:sync_list].each do |sync_group|
       sync_group.map! do |v|
-        ch = ChannelSyncKey.new(*v.values_at(:guild, :ch))
+        ch = ChannelKey.new(*v.values_at(:guild, :ch))
         @channel_synced.add(ch)
         ch
       end
@@ -186,7 +191,7 @@ class DiscordBot
 
     @bot.message do |event|
       if event.server
-        chkey = ChannelSyncKey.new(event.server.id, event.channel.id)
+        chkey = ChannelKey.new(event.server.id, event.channel.id)
         if chkey and not (event.message.webhook? and @channel_webhook_ids.include? event.message.webhook_id)
           # ignore file currently (avoid huge traffic)
           builder = Discordrb::Webhooks::Builder.new(
@@ -204,8 +209,40 @@ class DiscordBot
     end
   end
 
+  def process_task(task)
+    case task[:type]
+    when :twitch_live_notify
+      process_live_notify(:twitch, task[:online], task[:conf])
+    end
+  rescue Exception => ex
+    @bot.log_exception ex
+  end
+
+  def process_live_notify(platform, online, conf)
+    conf[:channels].each do |chconf|
+      key = ChannelKey.new(*chconf.values_at(:g, :ch))
+      ch = @bot.channel(key.ch, key.guild)
+      webhook = @live_notify_webhook[key]
+      unless webhook
+        wh = ch.webhooks.find { |wh| wh.name == conf[:webhook_name] } ||
+          (@live_notify_webhook[key] = ch.create_webhook(conf[:webhook_name]))
+        webhook = @live_notify_webhook[key] = Discordrb::Webhooks::Client.new(id: wh.id, token: wh.token)
+      end
+      webhook.execute do |builder|
+        builder.content = online ? chconf[:on] : chconf[:off]
+        builder.username = "TEST"
+      end
+    end
+  end
+
   def run
-    @bot.run
+    @bot.run true
+
+    Thread.new do
+      while task = @sys.queue.consume(:discord)
+        process_task task
+      end
+    end
   end
 end
 

@@ -30,6 +30,9 @@ GEM
     faraday-net_http (1.0.1)
     faraday_middleware (1.0.0)
       faraday (~> 1.0)
+    faye-websocket (0.11.0)
+      eventmachine (>= 0.12.0)
+      websocket-driver (>= 0.5.1)
     ffi (1.15.0)
     http-accept (1.7.0)
     http-cookie (1.0.3)
@@ -47,6 +50,7 @@ GEM
     rack (2.2.3)
     rack-protection (2.1.0)
       rack
+    rack-timeout (0.6.0)
     rest-client (2.1.0)
       http-accept (>= 1.7.0, < 2.0)
       http-cookie (>= 1.0.2, < 2.0)
@@ -79,12 +83,18 @@ GEM
     websocket-client-simple (0.3.0)
       event_emitter
       websocket
+    websocket-driver (0.7.3)
+      websocket-extensions (>= 0.1.0)
+    websocket-extensions (0.1.5)
 
 PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
   discordrb
+  eventmachine
+  faye-websocket
+  rack-timeout
   sinatra
   sinatra-contrib
   thin
