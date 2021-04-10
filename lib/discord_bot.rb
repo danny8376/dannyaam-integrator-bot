@@ -230,7 +230,7 @@ class DiscordBot
       end
       webhook.execute do |builder|
         builder.content = online ? chconf[:on] : chconf[:off]
-        builder.username = "TEST"
+        builder.username = conf[:webhook_username]
       end
     end
   end

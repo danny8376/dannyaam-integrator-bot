@@ -18,6 +18,7 @@ TWITCH_BOT_CONF = {
       live_notify_target: {
         discord: {
           webhook_name: "DANNYAAMDCINTEGRATORLIVENOTIFY",
+          webhook_username: "<WEBHOOK_USERNAME_HERE>",
           channels: [
             {
               g: <GUILD_ID>,
