@@ -266,12 +266,16 @@ class TwitchBot
     @subs.each do |k, v| # reg non-existing subs
       if v.nil?
         @log.info "Registering eventsub webhook (userid=#{k.userid}, type=#{k.type})"
-        @bot.register_eventsub(
-          user_id: k.userid,
-          event_type: k.type,
-          webhook: uri("/webhook"),
-          secret: @eventsub_secret
-        )
+        begin
+          @bot.register_eventsub(
+            user_id: k.userid,
+            event_type: k.type,
+            webhook: uri("/webhook"),
+            secret: @eventsub_secret
+          )
+        rescue Exception => ex
+          @log.error ex
+        end
       end
     end
   end
@@ -284,7 +288,11 @@ class TwitchBot
       slice.each do |userid, conf|
         topics.push "video-playback-by-id.#{userid}", "broadcast-settings-update.#{userid}" if conf[:live_notify]
       end
-      @bot.pubsub(topics) { |data| process_pubsub data }
+      begin
+        @bot.pubsub(topics) { |data| process_pubsub data }
+      rescue Exception => ex
+        @bot.error ex
+      end
     end
   end
 
