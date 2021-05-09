@@ -1,5 +1,13 @@
 GIT
-  remote: https://github.com/mauricew/ruby-twitch-api
+  remote: https://github.com/Invoca/async-rack.git
+  revision: 80d97d58d8b59319e8f50bc649750f86e6ff474a
+  branch: rack_2_0_support
+  specs:
+    async-rack (1.0.0)
+      rack (~> 2.0)
+
+GIT
+  remote: https://github.com/mauricew/ruby-twitch-api.git
   revision: fce26d6ab527521ed0cd30762e4071c8df6e3e10
   specs:
     twitch-api (0.4.0)
@@ -91,6 +99,7 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  async-rack!
   discordrb
   eventmachine
   faye-websocket

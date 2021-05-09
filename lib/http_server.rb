@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'eventmachine'
+require 'async-rack' # must before any rack things
 require 'sinatra/base'
 require 'sinatra/namespace'
 #require 'rack/fiber_pool'
@@ -68,6 +69,7 @@ class HTTPServer < Sinatra::Base
       set :port, @@conf[:port]
       set :server_settings, { signals: false } if EM.reactor_running?
       set :logging, $log_level == :debug
+      enable :sessions
     end
 
     namespace @@conf[:prefix] do
@@ -83,21 +85,79 @@ class HTTPServer < Sinatra::Base
               body: body,
               request: request,
               server: self,
-              callback: proc { |res|
-                EM.next_tick do
-                  res = [200, {}, res] if res.is_a? String
-                  res = [res, {}, nil] if res.is_a? Integer
-                  res = res.insert(1, {}) if res.is_a? Array and res.size == 2
-                  env['async.callback'].call res
-                end
-              }
+              callback: proc { |res| async_callback { res } }
             }
           })
-
           throw :async
         end
+
+        get "/oauth/callback" do
+          code = params['code']
+          if code
+            @@sys.queue.push(:twitch, {
+              type: :oauth_callback,
+              data: {
+                code: code,
+                callback: proc { |userid|
+                  async_callback {
+                    if userid
+                      twitch_logged_in userid
+                    else
+                      "Bad Login"
+                    end
+                  }
+                }
+              }
+            })
+            throw :async
+          else
+            "Bad Login"
+          end
+        end
+
+        get "/login" do
+          if twitch_check_login
+            "Nothing Now, Currently logged in as #{session[:twitch_login_userid]}"
+          end
+        end
+
       end
     end
+  end
+
+  def twitch_check_login
+    userid = session[:twitch_login_userid]
+    if userid
+      true
+    else
+      session[:twitch_login_back] = request.path_info
+      @@sys.queue.push(:twitch, {
+        type: :login,
+        data: {
+          callback: proc { |uri: nil, userid: nil|
+            async_callback {
+              redirect uri if uri
+              twitch_logged_in userid if userid
+            }
+          }
+        }
+      })
+      throw :async
+    end
+  end
+
+  def twitch_logged_in(userid)
+    session[:twitch_login_userid] = userid
+    back_uri = session[:twitch_login_back]
+    session[:twitch_login_back] = nil
+    redirect back_uri
+  end
+
+  def async_callback
+    EM.next_tick {
+      invoke { yield }
+      env['async.callback'].call response.finish
+    }
   end
 end
 

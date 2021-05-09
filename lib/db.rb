@@ -131,7 +131,6 @@ class Database
     attrs.each do |attr|
       define_method(attr) do
         hash = @backend[attr]
-        p ModifiedHash[hash]
         @backend[attr] = hash = ModifiedHash[hash] if not hash.is_a?(ModifiedHash) and hash.is_a?(Hash)
         @backend[attr] = hash = ModifiedHash.new unless hash
         hash.listen { @backend.save } unless hash.listen?
@@ -144,7 +143,9 @@ class Database
     end
   end
 
-  define_attr :twitch_token, :twitch_eventsub_secret
+  #define_attr :twitch_token, :twitch_eventsub_secret
+  define_attr :twitch_eventsub_secret
   #define_array :twitch_eventsub_subscriptions
+  define_hash :twitch_user_tokens
 end
 

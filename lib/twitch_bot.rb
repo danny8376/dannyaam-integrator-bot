@@ -32,8 +32,35 @@ class TwitchBot
   end
   
   class TwitchClientPatched < Twitch::Client
+    attr_accessor :userid
+
+    def initialize(options = {})
+      super(options)
+    rescue TwitchOAuth2::Error => ex
+      code = options[:code]
+      if @token_type == :user and code
+        CONNECTION.headers['Client-ID'] = options[:client_id]
+        @tokens = @oauth2_client.token(token_type: @token_type, code: code).slice(:access_token, :refresh_token)
+        renew_authorization_header
+      else
+        raise
+      end
+    end
+
     def check_tokens
-      @tokens = @oauth2_client.check_tokens(**@tokens, token_type: @token_type)
+      new_tokens = @oauth2_client.check_tokens(**@tokens, token_type: @token_type)
+      renew_authorization_header if new_tokens != @tokens
+      @tokens = new_tokens
+    end
+
+    def token_renew_callback(&block)
+      @token_renew_callback = block
+      yield @tokens
+    end
+
+    def renew_authorization_header
+      super
+      @token_renew_callback.call @tokens if @token_renew_callback
     end
 
     %w[delete].each do |http_method|
@@ -119,9 +146,10 @@ class TwitchBot
 
     def init_waiting_purge
       @purge_timer = EventMachine::PeriodicTimer.new(60) do
+        now = Time.now
         @waiting_requests.each do |nonce, (_, time, wait, err_cb, _)|
           wait = wait || 300 # default to 5 min
-          if Time.now - time > wait # 5 min
+          if now - time > wait # 5 min
             @waiting_requests.delete nonce
             err_cb.call :timeout if err_cb
           end
@@ -237,10 +265,41 @@ class TwitchBot
     @bot = TwitchClientPatched.new **@bot_oauth_parms
     @bot.access_token
 
+    @userbots = {} # for persist, userid => bot
+    @loginbots = {} # for login (temp), userid => [time, bot]
+    @loginbots_purge_timer = EventMachine::PeriodicTimer.new(60) do
+      now = Time.now
+      @loginbots.each do |userid, (time, loginbot)|
+        @loginbots.delete userid if now - time > 300 # 5 min
+      end
+    end
+
     init_eventsub
     init_pubsub
     init_livenotify
     init_consumer
+  end
+
+  def init_loginbots(id = nil, code: nil)
+    return @loginbots[id][1] if @loginbots[id]
+    token = @db.twitch_user_tokens[id]
+    params = token ? @user_oauth_parms.merge(token) : @user_oauth_parms
+    loginbot = TwitchClientPatched.new **params, code: code
+    if id
+      id = loginbot.userid = loginbot.get_users.data.first.id.to_i if id == :auto
+      @loginbots[id] = [Time.now, loginbot]
+    end
+    loginbot
+  end
+
+  def persist_userbot(id)
+    return @userbots[id] if @userbots[id]
+    loginbot = @loginbots[id]
+    return nil unless loginbot
+    @userbots[id] = loginbot[1]
+    @userbots[id].token_renew_callback { |tokens| @db.twitch_user_tokens[id] = tokens }
+    loginbot[0] = nil # never expires
+    @userbots[id]
   end
 
   def init_eventsub
@@ -317,6 +376,25 @@ class TwitchBot
         case task[:type]
         when :webhook
           process_task_webhook **task[:data]
+        when :login
+          begin
+            loginbot = init_loginbots
+            task[:data][:callback].call userid: loginbot.userid
+          rescue TwitchOAuth2::Error => ex
+            authlink = ex.metadata[:link]
+            if authlink
+              task[:data][:callback].call uri: authlink
+            else
+              @log.error ex
+            end
+          end
+        when :oauth_callback
+          begin
+            loginbot = init_loginbots(:auto, code: task[:data][:code])
+            task[:data][:callback].call userid: loginbot.userid
+          rescue TwitchOAuth2::Error => ex
+            pp ex
+          end
         end
       end
     end
