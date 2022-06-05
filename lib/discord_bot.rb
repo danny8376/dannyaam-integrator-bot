@@ -116,8 +116,8 @@ class DiscordBot
           end
         end
         role_update_list.each do |member_id, updates|
-          # member should already be cached (by init role cache above), thus should be no performance problem to discord api
-          guild.member(member_id).modify_roles(*updates.values_at(:add, :remove))
+          # member should already be cached (by init role cache above), thus should be no performance problem to discord ap
+          guild.member(member_id)&.modify_roles(*updates.values_at(:add, :remove))
         end
       end
     end
